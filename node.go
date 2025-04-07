@@ -13,22 +13,33 @@ type Node[I, O any] struct {
 func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
 	return &Node[I, O]{
 		context: &NodeContext[I, O]{
-			In:  &wireIn[I]{},
-			Out: &wireOut[O]{},
+			in:  &wireIn[I]{},
+			out: &wireOut[O]{},
 		},
 		handler: h,
 	}
 }
 
 // Connect two nodes together.
-func Connect[T, X, Y any](n1 *Node[X, T], n2 *Node[T, Y]) {
+func Connect[T, X, Y any](
+	n1 *Node[X, T],
+	n2 *Node[T, Y],
+) {
 	ch := make(chan T)
-	n1.context.Out.ch = ch
-	n2.context.In.ch = ch
+	ConnectChan(n1, n2, ch)
+}
+
+func ConnectChan[T, X, Y any](
+	n1 *Node[X, T],
+	n2 *Node[T, Y],
+	ch chan T,
+) {
+	n1.context.out.ch = ch
+	n2.context.in.ch = ch
 
 	done := make(chan struct{})
-	n1.context.Out.done = done
-	n2.context.In.done = done
+	n1.context.out.done = done
+	n2.context.in.done = done
 }
 
 func (n *Node[I, O]) Run(
@@ -36,14 +47,14 @@ func (n *Node[I, O]) Run(
 	wg *sync.WaitGroup,
 	errors chan<- error,
 ) {
-	n.context.Ctx = ctx
+	n.context.ctx = ctx
 	defer func() {
 		wg.Done()
-		if n.context.Out.ch != nil {
-			close(n.context.Out.ch)
+		if n.context.out.ch != nil {
+			close(n.context.out.ch)
 		}
-		if n.context.In.done != nil {
-			close(n.context.In.done)
+		if n.context.in.done != nil {
+			close(n.context.in.done)
 		}
 	}()
 	err := n.handler(n.context)

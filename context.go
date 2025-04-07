@@ -18,22 +18,26 @@ type wireOut[T any] struct {
 }
 
 type NodeContext[I, O any] struct {
-	Ctx    context.Context
-	In     *wireIn[I]
-	Out    *wireOut[O]
+	ctx    context.Context
+	in     *wireIn[I]
+	out    *wireOut[O]
 	errors chan<- error
+}
+
+func (n NodeContext[I, O]) Context() context.Context {
+	return n.ctx
 }
 
 // Read a message from the node input.
 func (n NodeContext[I, O]) Recv() (I, bool) {
 	select {
-	case data, more := <-n.In.ch:
+	case data, more := <-n.in.ch:
 		if !more {
 			var def I
 			return def, false
 		}
 		return data, true
-	case <-n.Ctx.Done():
+	case <-n.ctx.Done():
 		var def I
 		return def, false
 	}
@@ -42,12 +46,12 @@ func (n NodeContext[I, O]) Recv() (I, bool) {
 // Write a message to the node output.
 func (n NodeContext[I, O]) Send(data O) bool {
 	select {
-	case n.Out.ch <- data:
+	case n.out.ch <- data:
 		return true
-	case <-n.Out.done:
+	case <-n.out.done:
 		// The consumer is dead, no need to send anything anymore.
 		return false
-	case <-n.Ctx.Done():
+	case <-n.ctx.Done():
 		return false
 	}
 }
@@ -72,7 +76,7 @@ func (n NodeContext[I, O]) Error(err error) bool {
 	select {
 	case n.errors <- err:
 		return true
-	case <-n.Ctx.Done():
+	case <-n.ctx.Done():
 		return false
 	}
 }
