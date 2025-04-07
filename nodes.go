@@ -130,3 +130,38 @@ func ChanSink[T any](ch chan<- T) *Node[T, struct{}] {
 		return nil
 	})
 }
+
+func Map[I, O any](h func(I) (O, error)) *Node[I, O] {
+	return NewNode(func(nc *NodeContext[I, O]) error {
+		for msg := range nc.Iter() {
+			res, err := h(msg)
+			if err != nil {
+				return err
+			}
+			ok := nc.Send(res)
+			if !ok {
+				return nil
+			}
+		}
+		return nil
+	})
+}
+
+func Filter[T any](h func(T) (bool, error)) *Node[T, T] {
+	return NewNode(func(nc *NodeContext[T, T]) error {
+		for msg := range nc.Iter() {
+			ok, err := h(msg)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				continue
+			}
+			ok = nc.Send(msg)
+			if !ok {
+				return nil
+			}
+		}
+		return nil
+	})
+}
