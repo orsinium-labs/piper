@@ -1,6 +1,9 @@
 package piper
 
-import "context"
+import (
+	"context"
+	"iter"
+)
 
 type wireIn[T any] struct {
 	ch   <-chan T
@@ -46,6 +49,21 @@ func (n NodeContext[I, O]) Send(data O) bool {
 		return false
 	case <-n.Ctx.Done():
 		return false
+	}
+}
+
+func (n NodeContext[I, O]) Iter() iter.Seq[I] {
+	return func(yield func(I) bool) {
+		for {
+			data, more := n.Recv()
+			if !more {
+				return
+			}
+			more = yield(data)
+			if !more {
+				return
+			}
+		}
 	}
 }
 
