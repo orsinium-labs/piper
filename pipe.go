@@ -1,7 +1,8 @@
-package pipe
+package piper
 
 import (
 	"context"
+	"errors"
 	"sync"
 )
 
@@ -9,6 +10,7 @@ type node interface {
 	Run(context.Context, *sync.WaitGroup, chan<- error)
 }
 
+// Run the pipeline.
 func Run(ctx context.Context, nodes ...node) <-chan error {
 	errors := make(chan error)
 	wg := sync.WaitGroup{}
@@ -18,97 +20,32 @@ func Run(ctx context.Context, nodes ...node) <-chan error {
 	}
 	go func() {
 		wg.Wait()
+		// If context is canceled, emit that as an error.
+		// However, make sure to not block if there is nobody reading errors.
+		select {
+		case <-ctx.Done():
+			select {
+			case errors <- ctx.Err():
+			default:
+			}
+		default:
+		}
 		close(errors)
 	}()
 	return errors
 }
 
-func Wait(<-chan error) error {
-	// ...
-}
-
-type WireIn[T any] struct {
-	ch   <-chan T
-	done chan<- struct{}
-}
-
-type WireOut[T any] struct {
-	// Closed by writer when the writer exits.
-	ch chan<- T
-	// Closed by reader when the reader exits
-	done <-chan struct{}
-}
-
-type NodeContext[I, O any] struct {
-	Ctx context.Context
-	In  *WireIn[I]
-	Out *WireOut[O]
-}
-
-type Node[I, O any] struct {
-	context *NodeContext[I, O]
-	handler func(*NodeContext[I, O]) error
-}
-
-func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
-	return &Node[I, O]{
-		context: &NodeContext[I, O]{},
-		handler: h,
+// Wrap [Run], wait for all nodes to finish, return combined errors if any.
+func Wait(errs <-chan error) error {
+	var result []error
+	for err := range errs {
+		result = append(result, err)
 	}
-}
-
-func Connect[T, X, Y any](n1 *Node[X, T], n2 *Node[T, Y]) {
-	ch := make(chan T)
-	n1.context.Out.ch = ch
-	n2.context.In.ch = ch
-
-	done := make(chan struct{})
-	n1.context.Out.done = done
-	n2.context.In.done = done
-}
-
-func (n NodeContext[I, O]) Recv() (I, bool) {
-	select {
-	case data, more := <-n.In.ch:
-		if !more {
-			var def I
-			return def, false
-		}
-		return data, true
-	case <-n.Ctx.Done():
-		var def I
-		return def, false
+	if len(result) == 0 {
+		return nil
 	}
-}
-
-func (n NodeContext[I, O]) Send(data O) bool {
-	select {
-	case n.Out.ch <- data:
-		return true
-	case <-n.Out.done:
-		// The consumer is dead, no need to send anything anymore.
-		return false
-	case <-n.Ctx.Done():
-		return false
+	if len(result) == 1 {
+		return result[0]
 	}
-}
-
-func (n *Node[I, O]) Run(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	errors chan<- error,
-) {
-	n.context.Ctx = ctx
-	defer func() {
-		wg.Done()
-		close(n.context.Out.ch)
-		close(n.context.In.done)
-	}()
-	err := n.handler(n.context)
-	if err != nil {
-		select {
-		case errors <- err:
-		case <-ctx.Done():
-		}
-	}
+	return errors.Join(result...)
 }
