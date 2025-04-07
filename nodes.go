@@ -5,6 +5,7 @@ import (
 	"os/exec"
 )
 
+// Node reading byte chunks from the command's stdout.
 func CommandSource(cmd *exec.Cmd, chunkSize int) (*Node[struct{}, []byte], error) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -14,6 +15,7 @@ func CommandSource(cmd *exec.Cmd, chunkSize int) (*Node[struct{}, []byte], error
 	return node, nil
 }
 
+// Node writing byte chunks into the command's stdin.
 func CommandSink(cmd *exec.Cmd) (*Node[[]byte, struct{}], error) {
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -23,6 +25,7 @@ func CommandSink(cmd *exec.Cmd) (*Node[[]byte, struct{}], error) {
 	return node, nil
 }
 
+// Node reading byte chunks from the given read-closer and closing it.
 func ReadCloserSource(r io.ReadCloser, chunkSize int) *Node[struct{}, []byte] {
 	return NewNode(func(nc *NodeContext[struct{}, []byte]) (err error) {
 		defer func() {
@@ -45,6 +48,7 @@ func ReadCloserSource(r io.ReadCloser, chunkSize int) *Node[struct{}, []byte] {
 	})
 }
 
+// Node reading byte chunks from the given reader.
 func ReaderSource(r io.Reader, chunkSize int) *Node[struct{}, []byte] {
 	return NewNode(func(nc *NodeContext[struct{}, []byte]) error {
 		for {
@@ -61,6 +65,7 @@ func ReaderSource(r io.Reader, chunkSize int) *Node[struct{}, []byte] {
 	})
 }
 
+// Node writing byte chunks into the given write-closer and closing it.
 func WriteCloserSink(w io.WriteCloser) *Node[[]byte, struct{}] {
 	return NewNode(func(nc *NodeContext[[]byte, struct{}]) (err error) {
 		defer func() {
@@ -79,6 +84,7 @@ func WriteCloserSink(w io.WriteCloser) *Node[[]byte, struct{}] {
 	})
 }
 
+// Node writing byte chunks into the given writer.
 func WriterSink(w io.Writer) *Node[[]byte, struct{}] {
 	return NewNode(func(nc *NodeContext[[]byte, struct{}]) error {
 		for chunk := range nc.Iter() {
@@ -91,6 +97,7 @@ func WriterSink(w io.Writer) *Node[[]byte, struct{}] {
 	})
 }
 
+// Node reading messages from the given channel.
 func ChanSource[T any](ch <-chan T) *Node[struct{}, T] {
 	return NewNode(func(nc *NodeContext[struct{}, T]) error {
 		for {
@@ -110,6 +117,7 @@ func ChanSource[T any](ch <-chan T) *Node[struct{}, T] {
 	})
 }
 
+// Node writing messages into the given channel.
 func ChanSink[T any](ch chan<- T) *Node[T, struct{}] {
 	return NewNode(func(nc *NodeContext[T, struct{}]) error {
 		for msg := range nc.Iter() {

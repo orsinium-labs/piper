@@ -5,6 +5,7 @@ import (
 	"sync"
 )
 
+// A unit of work, a background process reading input, doing work, and writing to output.
 type Node[I, O any] struct {
 	context *NodeContext[I, O]
 	handler func(*NodeContext[I, O]) error
@@ -29,6 +30,7 @@ func Connect[T, X, Y any](
 	ConnectChan(n1, n2, ch)
 }
 
+// COnnect two nodes together using the provided channel.
 func ConnectChan[T, X, Y any](
 	n1 *Node[X, T],
 	n2 *Node[T, Y],
@@ -42,6 +44,7 @@ func ConnectChan[T, X, Y any](
 	n2.context.in.done = done
 }
 
+// Run the node. Don't call directly, use [Run] instead.
 func (n *Node[I, O]) Run(
 	ctx context.Context,
 	wg *sync.WaitGroup,

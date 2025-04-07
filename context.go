@@ -13,7 +13,7 @@ type wireIn[T any] struct {
 type wireOut[T any] struct {
 	// Closed by writer when the writer exits.
 	ch chan<- T
-	// Closed by reader when the reader exits
+	// Closed by reader when the reader exits.
 	done <-chan struct{}
 }
 
@@ -24,6 +24,7 @@ type NodeContext[I, O any] struct {
 	errors chan<- error
 }
 
+// Get the context passed into [Run].
 func (n NodeContext[I, O]) Context() context.Context {
 	return n.ctx
 }
@@ -56,6 +57,7 @@ func (n NodeContext[I, O]) Send(data O) bool {
 	}
 }
 
+// Iterate over input messages.
 func (n NodeContext[I, O]) Iter() iter.Seq[I] {
 	return func(yield func(I) bool) {
 		for {

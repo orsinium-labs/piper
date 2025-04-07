@@ -11,6 +11,13 @@ type node interface {
 }
 
 // Run the pipeline.
+//
+// If context is cancelled, all the nodes are cancelled
+// ([NodeContext.Send] and [NodeContext.Recv] will return false).
+//
+// Any errors returned by node handlers or emitted using [NodeContext.Error]
+// are emitted into the returned channel.
+// The channel is closed when all nodes exit.
 func Run(ctx context.Context, nodes ...node) <-chan error {
 	errors := make(chan error)
 	wg := sync.WaitGroup{}
