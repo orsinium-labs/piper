@@ -10,6 +10,8 @@ type node interface {
 	Run(context.Context, *sync.WaitGroup, chan<- error)
 }
 
+type Errors <-chan error
+
 // Run the pipeline.
 //
 // If context is cancelled, all the nodes are cancelled
@@ -18,7 +20,7 @@ type node interface {
 // Any errors returned by node handlers or emitted using [NodeContext.Error]
 // are emitted into the returned channel.
 // The channel is closed when all nodes exit.
-func Run(ctx context.Context, nodes ...node) <-chan error {
+func Run(ctx context.Context, nodes ...node) Errors {
 	errors := make(chan error)
 	wg := sync.WaitGroup{}
 	wg.Add(len(nodes))
@@ -43,7 +45,7 @@ func Run(ctx context.Context, nodes ...node) <-chan error {
 }
 
 // Wrap [Run], wait for all nodes to finish, return combined errors if any.
-func Wait(errs <-chan error) error {
+func Wait(errs Errors) error {
 	var result []error
 	for err := range errs {
 		result = append(result, err)
