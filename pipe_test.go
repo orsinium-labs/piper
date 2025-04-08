@@ -55,20 +55,12 @@ func TestPipe3(t *testing.T) {
 		}
 		return nil
 	})
-	doubler := piper.NewNode(func(nc *piper.NodeContext[int, int]) error {
-		for n := range nc.Iter() {
-			ok := nc.Send(n)
-			if !ok {
-				break
-			}
-		}
-		return nil
+	doubler := piper.Map(func(n int) (int, error) {
+		return n * 2, nil
 	})
 	sum := 0
-	summer := piper.NewNode(func(nc *piper.NodeContext[int, struct{}]) error {
-		for n := range nc.Iter() {
-			sum += n
-		}
+	summer := piper.Each(func(n int) error {
+		sum += n
 		return nil
 	})
 
@@ -78,7 +70,7 @@ func TestPipe3(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sum != 3+4+5 {
+	if sum != (3+4+5)*2 {
 		t.Fatal(sum)
 	}
 }

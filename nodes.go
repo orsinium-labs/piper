@@ -147,6 +147,18 @@ func Map[I, O any](h func(I) (O, error)) *Node[I, O] {
 	})
 }
 
+func Each[I any](h func(I) error) *Node[I, struct{}] {
+	return NewNode(func(nc *NodeContext[I, struct{}]) error {
+		for msg := range nc.Iter() {
+			err := h(msg)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func Filter[T any](h func(T) (bool, error)) *Node[T, T] {
 	return NewNode(func(nc *NodeContext[T, T]) error {
 		for msg := range nc.Iter() {
