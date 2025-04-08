@@ -69,6 +69,12 @@ func ConnectChan[T, X, Y any](
 	n2 *Node[T, Y],
 	ch chan T,
 ) {
+	if n1.context.out.ch != nil {
+		panic("one-to-many connection is not implemented yet")
+	}
+	if n2.context.in.ch != nil {
+		panic("many-to-one connection is not implemented yet")
+	}
 	n1.context.out.ch = ch
 	n2.context.in.ch = ch
 
