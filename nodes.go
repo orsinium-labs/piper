@@ -54,6 +54,9 @@ func ReaderSource(r io.Reader, chunkSize int) *Node[struct{}, []byte] {
 		for {
 			chunk := make([]byte, chunkSize)
 			n, err := r.Read(chunk)
+			if err == io.EOF {
+				return nil
+			}
 			if err != nil {
 				return err
 			}
