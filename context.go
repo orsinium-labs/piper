@@ -82,3 +82,31 @@ func (n NodeContext[I, O]) Error(err error) bool {
 		return false
 	}
 }
+
+type ctxKey[T any] struct{}
+
+// Attach the given value to the context.
+//
+// Must be called on the context before passing it into Pipe or [Run].
+//
+// The context can store only one value of the given type.
+// Panics if there is already a value of the same type in the context.
+func With[T any](ctx context.Context, val T) context.Context {
+	key := ctxKey[T]{}
+	if ctx.Value(key) != nil {
+		panic("context already contains value of the given type")
+	}
+	ctx = context.WithValue(ctx, key, val)
+	return ctx
+}
+
+// Get from the node context the value added using [With].
+//
+// Panics if there is no value of the given type in the context.
+func Get[T, I, O any](nc *NodeContext[I, O]) T {
+	raw := nc.ctx.Value(ctxKey[T]{})
+	if raw == nil {
+		panic("no value of the given type in the context")
+	}
+	return raw.(T)
+}
