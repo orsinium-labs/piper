@@ -19,15 +19,8 @@ func TestCommandSource(t *testing.T) {
 		return nil
 	})
 	cmd := exec.Command("seq", "5", "11")
-	cmdNode, err := piper.CommandSource(cmd, 1024)
-	if err != nil {
-		t.Fatalf("create command source: %v", err)
-	}
-	err = cmd.Start()
-	if err != nil {
-		t.Fatalf("start command: %v", err)
-	}
-	err = piper.Wait(piper.Pipe3(
+	cmdNode := piper.CommandSource(cmd, 1024)
+	err := piper.Wait(piper.Pipe3(
 		t.Context(),
 		cmdNode,
 		piper.BytesLinesNode(),

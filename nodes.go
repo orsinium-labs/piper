@@ -9,47 +9,79 @@ import (
 )
 
 // Node reading byte chunks from the command's stdout.
-func CommandSource(cmd *exec.Cmd, chunkSize int) (*Node[struct{}, []byte], error) {
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	node := ReadCloserSource(stdout, chunkSize)
-	return node, nil
+func CommandSource(cmd *exec.Cmd, chunkSize int) *Node[struct{}, []byte] {
+	return NewNode(func(nc *NodeContext[struct{}, []byte]) (err error) {
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("connect to stdout: %w", err)
+		}
+		defer func() {
+			_ = stdout.Close()
+		}()
+		if cmd.Process == nil {
+			err = cmd.Start()
+			if err != nil {
+				return fmt.Errorf("start %s: %w", cmd.Path, err)
+			}
+		}
+		err = pipeReader(nc, stdout, chunkSize)
+		if err != nil {
+			return fmt.Errorf("read from stdout: %w", err)
+		}
+		err = cmd.Wait()
+		if err != nil {
+			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
+		}
+		return nil
+	})
 }
 
 // Node writing byte chunks into the command's stdin.
-func CommandSink(cmd *exec.Cmd) (*Node[[]byte, struct{}], error) {
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, err
-	}
-	node := WriteCloserSink(stdin)
-	return node, nil
+func CommandSink(cmd *exec.Cmd) *Node[[]byte, struct{}] {
+	return NewNode(func(nc *NodeContext[[]byte, struct{}]) (err error) {
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return fmt.Errorf("connect to stdin: %w", err)
+		}
+		defer func() {
+			_ = stdin.Close()
+		}()
+		if cmd.Process == nil {
+			err = cmd.Start()
+			if err != nil {
+				return fmt.Errorf("start %s: %w", cmd.Path, err)
+			}
+		}
+		for chunk := range nc.Iter() {
+			_, err := stdin.Write(chunk)
+			if err != nil {
+				return err
+			}
+		}
+		err = cmd.Wait()
+		if err != nil {
+			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
+		}
+		return nil
+	})
 }
 
 // A combination of [CommandSink] and [CommandSource].
 //
 // Run the command, write input into stdin, read output from stdout.
-func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) (*Node[[]byte, []byte], error) {
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return nil, fmt.Errorf("connect to stdout: %w", err)
-	}
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, fmt.Errorf("connect to stdin: %w", err)
-	}
-	node := NewNode(func(nc *NodeContext[[]byte, []byte]) (err error) {
+func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) *Node[[]byte, []byte] {
+	return NewNode(func(nc *NodeContext[[]byte, []byte]) (err error) {
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			return fmt.Errorf("connect to stdout: %w", err)
+		}
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			return fmt.Errorf("connect to stdin: %w", err)
+		}
 		defer func() {
-			closeErr := stdout.Close()
-			if err == nil && closeErr != nil {
-				err = closeErr
-			}
-			closeErr = stdin.Close()
-			if err == nil && closeErr != nil {
-				err = closeErr
-			}
+			_ = stdout.Close()
+			_ = stdin.Close()
 		}()
 
 		go func() {
@@ -71,11 +103,10 @@ func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) (*Node[[]byte, []byte], err
 		}
 		err = cmd.Wait()
 		if err != nil {
-			return fmt.Errorf("wait for %s: %v", cmd.Path, err)
+			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
 		}
 		return nil
 	})
-	return node, nil
 }
 
 // Node reading byte chunks from the given read-closer and closing it.
