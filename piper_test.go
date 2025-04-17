@@ -40,7 +40,66 @@ func TestPipe1Error(t *testing.T) {
 		return errors.New("oh no!")
 	})
 	err := piper.Wait(piper.Run(t.Context(), n1))
-	if err.Error() != "oh no!" {
+	if err.Error() != "node #1: exited with error: oh no!" {
+		t.Fatal(err)
+	}
+}
+
+func TestPipe1Errorf(t *testing.T) {
+	n1 := piper.NewNode(func(nc *piper.NodeContext[struct{}, struct{}]) error {
+		nc.Errorf("well: %v", "damn")
+		return nil
+	})
+	err := piper.Wait(piper.Run(t.Context(), n1))
+	if err.Error() != "node #1: well: damn" {
+		t.Fatal(err)
+	}
+}
+
+func TestPipe1Cencel(t *testing.T) {
+	n1 := piper.NewNode(func(nc *piper.NodeContext[struct{}, struct{}]) error {
+		ok := nc.Send(struct{}{})
+		if ok {
+			t.Fatal("expected Send to fail")
+		}
+		_, ok = nc.Recv()
+		if ok {
+			t.Fatal("expected Recv to fail")
+		}
+		if !nc.Cancelled() {
+			t.Fatal("expected Cancelled to be true")
+		}
+		return nil
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	err := piper.Wait(piper.Run(ctx, n1))
+	if err.Error() != "context canceled" {
+		t.Fatal(err)
+	}
+}
+
+func TestPipe1Name(t *testing.T) {
+	n1 := piper.NewNode(func(nc *piper.NodeContext[struct{}, struct{}]) error {
+		return errors.New("oh no!")
+	}).WithName("hello")
+	err := piper.Wait(piper.Run(t.Context(), n1))
+	if err.Error() != "node hello: exited with error: oh no!" {
+		t.Fatal(err)
+	}
+}
+
+func TestWith(t *testing.T) {
+	n1 := piper.NewNode(func(nc *piper.NodeContext[struct{}, struct{}]) error {
+		name := piper.Get[string](nc)
+		if name != "aragorn" {
+			t.Fatalf("expected aragorn, got %s", name)
+		}
+		return nil
+	})
+	ctx := piper.With(t.Context(), "aragorn")
+	err := piper.Wait(piper.Run(ctx, n1))
+	if err != nil {
 		t.Fatal(err)
 	}
 }

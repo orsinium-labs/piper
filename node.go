@@ -21,13 +21,24 @@ func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
 	}
 }
 
+// Set the node name.
+//
+// If set, it will be added to all errors emitted by the node.
+func (n *Node[I, O]) WithName(name string) *Node[I, O] {
+	n.context.name = name
+	return n
+}
+
 // Run the node. Don't call directly, use [Run] instead.
 func (n *Node[I, O]) Run(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	errors chan<- error,
+	index int,
 ) {
 	n.context.ctx = ctx
+	n.context.index = index
+	n.context.errors = errors
 	defer func() {
 		wg.Done()
 		if n.context.out.ch != nil {
@@ -39,9 +50,6 @@ func (n *Node[I, O]) Run(
 	}()
 	err := n.handler(n.context)
 	if err != nil {
-		select {
-		case errors <- err:
-		case <-ctx.Done():
-		}
+		n.context.Errorf("exited with error: %w", err)
 	}
 }

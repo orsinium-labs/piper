@@ -7,7 +7,7 @@ import (
 )
 
 type node interface {
-	Run(context.Context, *sync.WaitGroup, chan<- error)
+	Run(context.Context, *sync.WaitGroup, chan<- error, int)
 }
 
 type Errors <-chan error
@@ -24,8 +24,8 @@ func Run(ctx context.Context, nodes ...node) Errors {
 	errors := make(chan error)
 	wg := sync.WaitGroup{}
 	wg.Add(len(nodes))
-	for _, node := range nodes {
-		go node.Run(ctx, &wg, errors)
+	for i, node := range nodes {
+		go node.Run(ctx, &wg, errors, i+1)
 	}
 	go func() {
 		wg.Wait()
