@@ -2,6 +2,7 @@ package piper
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os/exec"
 	"slices"
@@ -27,6 +28,56 @@ func CommandSink(cmd *exec.Cmd) (*Node[[]byte, struct{}], error) {
 	return node, nil
 }
 
+// A combination of [CommandSink] and [CommandSource].
+//
+// Run the command, write input into stdin, read output from stdout.
+func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) (*Node[[]byte, []byte], error) {
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, fmt.Errorf("connect to stdout: %w", err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, fmt.Errorf("connect to stdin: %w", err)
+	}
+	node := NewNode(func(nc *NodeContext[[]byte, []byte]) (err error) {
+		defer func() {
+			closeErr := stdout.Close()
+			if err == nil && closeErr != nil {
+				err = closeErr
+			}
+			closeErr = stdin.Close()
+			if err == nil && closeErr != nil {
+				err = closeErr
+			}
+		}()
+
+		go func() {
+			for chunk := range nc.Iter() {
+				_, err := stdin.Write(chunk)
+				if err != nil {
+					nc.Errorf("write to stdin: %w", err)
+				}
+			}
+		}()
+
+		err = cmd.Start()
+		if err != nil {
+			return fmt.Errorf("start %s: %v", cmd.Path, err)
+		}
+		err = pipeReader(nc, stdout, stdoutChunkSize)
+		if err != nil {
+			nc.Errorf("read from stdout: %w", err)
+		}
+		err = cmd.Wait()
+		if err != nil {
+			return fmt.Errorf("wait for %s: %v", cmd.Path, err)
+		}
+		return nil
+	})
+	return node, nil
+}
+
 // Node reading byte chunks from the given read-closer and closing it.
 func ReadCloserSource(r io.ReadCloser, chunkSize int) *Node[struct{}, []byte] {
 	return NewNode(func(nc *NodeContext[struct{}, []byte]) (err error) {
@@ -36,41 +87,32 @@ func ReadCloserSource(r io.ReadCloser, chunkSize int) *Node[struct{}, []byte] {
 				err = closeErr
 			}
 		}()
-		for {
-			chunk := make([]byte, chunkSize)
-			n, err := r.Read(chunk)
-			if err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			ok := nc.Send(chunk[:n])
-			if !ok {
-				return nil
-			}
-		}
+		return pipeReader(nc, r, chunkSize)
 	})
 }
 
 // Node reading byte chunks from the given reader.
 func ReaderSource(r io.Reader, chunkSize int) *Node[struct{}, []byte] {
 	return NewNode(func(nc *NodeContext[struct{}, []byte]) error {
-		for {
-			chunk := make([]byte, chunkSize)
-			n, err := r.Read(chunk)
-			if err == io.EOF {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			ok := nc.Send(chunk[:n])
-			if !ok {
-				return nil
-			}
-		}
+		return pipeReader(nc, r, chunkSize)
 	})
+}
+
+func pipeReader[T any](nc *NodeContext[T, []byte], r io.Reader, chunkSize int) error {
+	for {
+		chunk := make([]byte, chunkSize)
+		n, err := r.Read(chunk)
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		ok := nc.Send(chunk[:n])
+		if !ok {
+			return nil
+		}
+	}
 }
 
 // Node writing byte chunks into the given write-closer and closing it.
