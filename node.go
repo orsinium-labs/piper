@@ -2,7 +2,6 @@ package piper
 
 import (
 	"context"
-	"fmt"
 	"sync"
 )
 
@@ -39,6 +38,7 @@ func (n *Node[I, O]) Run(
 ) {
 	n.context.ctx = ctx
 	n.context.index = index
+	n.context.errors = errors
 	defer func() {
 		wg.Done()
 		if n.context.out.ch != nil {
@@ -50,7 +50,6 @@ func (n *Node[I, O]) Run(
 	}()
 	err := n.handler(n.context)
 	if err != nil {
-		err = fmt.Errorf("node exited with error: %w", err)
-		n.context.Error(err)
+		n.context.Errorf("exited with error: %w", err)
 	}
 }
