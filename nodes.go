@@ -1,8 +1,10 @@
 package piper
 
 import (
+	"bytes"
 	"io"
 	"os/exec"
+	"slices"
 )
 
 // Node reading byte chunks from the command's stdout.
@@ -37,6 +39,9 @@ func ReadCloserSource(r io.ReadCloser, chunkSize int) *Node[struct{}, []byte] {
 		for {
 			chunk := make([]byte, chunkSize)
 			n, err := r.Read(chunk)
+			if err == io.EOF {
+				return nil
+			}
 			if err != nil {
 				return err
 			}
@@ -175,6 +180,33 @@ func Filter[T any](h func(T) (bool, error)) *Node[T, T] {
 			ok = nc.Send(msg)
 			if !ok {
 				return nil
+			}
+		}
+		return nil
+	})
+}
+
+// Given a stream of bytes, split it into lines.
+//
+// Useful in combination with [CommandSource] to process command stdout line-by-line.
+func BytesLinesNode() *Node[[]byte, []byte] {
+	return NewNode(func(nc *NodeContext[[]byte, []byte]) error {
+		var stdout []byte
+		for stdoutChunk := range nc.Iter() {
+			stdout = append(stdout, stdoutChunk...)
+			for {
+				line, rest, found := bytes.Cut(stdout, []byte{'\n'})
+				if !found {
+					break
+				}
+				// Not just replace stdout with rest but reallocate it
+				// so that the underlying array of the slice doesn't keep growing
+				// to the size of the whole stdout.
+				stdout = slices.Clone(rest)
+				ok := nc.Send(line)
+				if !ok {
+					return nil
+				}
 			}
 		}
 		return nil
