@@ -35,8 +35,10 @@ func (n *Node[I, O]) Run(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	errors chan<- error,
+	index int,
 ) {
 	n.context.ctx = ctx
+	n.context.index = index
 	defer func() {
 		wg.Done()
 		if n.context.out.ch != nil {

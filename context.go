@@ -24,6 +24,7 @@ type NodeContext[I, O any] struct {
 	out    *wireOut[O]
 	errors chan<- error
 	name   string
+	index  int
 }
 
 // Get the context passed into [Run].
@@ -96,7 +97,9 @@ func (n NodeContext[I, O]) Error(err error) bool {
 		return !n.Cancelled()
 	}
 	if n.name != "" {
-		err = fmt.Errorf("task %s: %w", n.name, err)
+		err = fmt.Errorf("node %s: %w", n.name, err)
+	} else {
+		err = fmt.Errorf("node #%d: %w", n.index, err)
 	}
 	select {
 	case n.errors <- err:
