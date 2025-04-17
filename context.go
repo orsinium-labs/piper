@@ -2,6 +2,7 @@ package piper
 
 import (
 	"context"
+	"fmt"
 	"iter"
 )
 
@@ -22,6 +23,7 @@ type NodeContext[I, O any] struct {
 	in     *wireIn[I]
 	out    *wireOut[O]
 	errors chan<- error
+	name   string
 }
 
 // Get the context passed into [Run].
@@ -30,6 +32,9 @@ func (n NodeContext[I, O]) Context() context.Context {
 }
 
 // Read a message from the node input.
+//
+// Returns false if the pipeline is cancelled
+// or if the input node has exited and will produce no more messages.
 func (n NodeContext[I, O]) Recv() (I, bool) {
 	select {
 	case data, more := <-n.in.ch:
@@ -45,6 +50,9 @@ func (n NodeContext[I, O]) Recv() (I, bool) {
 }
 
 // Write a message to the node output.
+//
+// Returns false if the pipeline is cancelled
+// or the consumer node has exited and cannot handle messages.
 func (n NodeContext[I, O]) Send(data O) bool {
 	select {
 	case n.out.ch <- data:
@@ -73,12 +81,37 @@ func (n NodeContext[I, O]) Iter() iter.Seq[I] {
 	}
 }
 
-// Emit an error.
+// Same as calling [fmt.Errorf] and then [NodeContext.Error].
+//
+// Returns false if the pipeline is cancelled.
+func (n NodeContext[I, O]) Errorf(format string, a ...any) bool {
+	return n.Error(fmt.Errorf(format, a...))
+}
+
+// Emit an error without interrupting the pipeline.
+//
+// Returns false if the pipeline is cancelled.
 func (n NodeContext[I, O]) Error(err error) bool {
+	if err == nil {
+		return !n.Cancelled()
+	}
+	if n.name != "" {
+		err = fmt.Errorf("task %s: %w", n.name, err)
+	}
 	select {
 	case n.errors <- err:
 		return true
 	case <-n.ctx.Done():
+		return false
+	}
+}
+
+// Returns true if the pipeline's input context is done.
+func (n NodeContext[I, O]) Cancelled() bool {
+	select {
+	case <-n.ctx.Done():
+		return true
+	default:
 		return false
 	}
 }

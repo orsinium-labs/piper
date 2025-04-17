@@ -2,6 +2,7 @@ package piper
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -19,6 +20,14 @@ func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
 		},
 		handler: h,
 	}
+}
+
+// Set the node name.
+//
+// If set, it will be added to all errors emitted by the node.
+func (n *Node[I, O]) WithName(name string) *Node[I, O] {
+	n.context.name = name
+	return n
 }
 
 // Run the node. Don't call directly, use [Run] instead.
@@ -39,9 +48,7 @@ func (n *Node[I, O]) Run(
 	}()
 	err := n.handler(n.context)
 	if err != nil {
-		select {
-		case errors <- err:
-		case <-ctx.Done():
-		}
+		err = fmt.Errorf("node exited with error: %w", err)
+		n.context.Error(err)
 	}
 }
