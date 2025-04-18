@@ -58,6 +58,7 @@ func CommandSink(cmd *exec.Cmd) *Node[[]byte, struct{}] {
 				return err
 			}
 		}
+		_ = stdin.Close()
 		err = cmd.Wait()
 		if err != nil {
 			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
@@ -91,6 +92,7 @@ func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) *Node[[]byte, []byte] {
 					nc.Errorf("write to stdin: %w", err)
 				}
 			}
+			_ = stdin.Close()
 		}()
 
 		err = cmd.Start()
