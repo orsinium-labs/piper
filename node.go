@@ -2,6 +2,7 @@ package piper
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -12,6 +13,9 @@ type Node[I, O any] struct {
 }
 
 func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
+	if h == nil {
+		panic("node handler must be non-nil")
+	}
 	return &Node[I, O]{
 		context: &NodeContext[I, O]{
 			in:  &wireIn[I]{},
@@ -26,6 +30,28 @@ func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
 // If set, it will be added to all errors emitted by the node.
 func (n *Node[I, O]) WithName(name string) *Node[I, O] {
 	n.context.name = name
+	return n
+}
+
+// Catch panics and transform them into errors using the given handler.
+//
+// If the given panic handler is nil, [fmt.Errorf] will be used.
+func (n *Node[I, O]) WithPanicHandler(ph func(any) error) *Node[I, O] {
+	origHandler := n.handler
+	if ph == nil {
+		ph = func(p any) error {
+			return fmt.Errorf("panic: %v", p)
+		}
+	}
+	n.handler = func(nc *NodeContext[I, O]) (err error) {
+		defer func() {
+			p := recover()
+			if p != nil {
+				err = ph(p)
+			}
+		}()
+		return origHandler(nc)
+	}
 	return n
 }
 
