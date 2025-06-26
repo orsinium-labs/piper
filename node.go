@@ -19,8 +19,9 @@ func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
 	}
 	return &Node[I, O]{
 		context: &NodeContext[I, O]{
-			in:  &wireIn[I]{},
-			out: &wireOut[O]{},
+			in:    &wireIn[I]{},
+			out:   &wireOut[O]{},
+			state: new(int32),
 		},
 		handler: h,
 	}
