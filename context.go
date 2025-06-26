@@ -4,6 +4,26 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"sync/atomic"
+)
+
+type NodeState uint8
+
+const (
+	// The node hasn't called Recv or Send yet.
+	NodeStateNew NodeState = 0
+	// The node has called Recv and is waiting for incoming messages.
+	NodeStateRecv NodeState = 1
+	// The node has received a message and now handles it.
+	NodeStateProcess NodeState = 2
+	// The node has called Send and is waiting for the next step to consume the message.
+	NodeStateSend NodeState = 3
+	// The node has sent a message with Send but hasn't called Recv yet.
+	NodeStateIdle NodeState = 4
+	// The node handler has exited without an error.
+	NodeStateDone NodeState = 5
+	// The node handler has exited with an error.
+	NodeStateFailed NodeState = 6
 )
 
 type wireIn[T any] struct {
@@ -25,6 +45,7 @@ type NodeContext[I, O any] struct {
 	errors chan<- error
 	name   string
 	index  int
+	state  *int32
 }
 
 // Get the context passed into [Run].
@@ -37,14 +58,17 @@ func (n NodeContext[I, O]) Context() context.Context {
 // Returns false if the pipeline is cancelled
 // or if the input node has exited and will produce no more messages.
 func (n NodeContext[I, O]) Recv() (I, bool) {
+	n.setState(NodeStateRecv)
 	select {
 	case data, more := <-n.in.ch:
+		n.setState(NodeStateProcess)
 		if !more {
 			var def I
 			return def, false
 		}
 		return data, true
 	case <-n.ctx.Done():
+		n.setState(NodeStateProcess)
 		var def I
 		return def, false
 	}
@@ -55,13 +79,17 @@ func (n NodeContext[I, O]) Recv() (I, bool) {
 // Returns false if the pipeline is cancelled
 // or the consumer node has exited and cannot handle messages.
 func (n NodeContext[I, O]) Send(data O) bool {
+	n.setState(NodeStateSend)
 	select {
 	case n.out.ch <- data:
+		n.setState(NodeStateIdle)
 		return true
 	case <-n.out.done:
+		n.setState(NodeStateIdle)
 		// The consumer is dead, no need to send anything anymore.
 		return false
 	case <-n.ctx.Done():
+		n.setState(NodeStateIdle)
 		return false
 	}
 }
@@ -117,6 +145,10 @@ func (n NodeContext[I, O]) Cancelled() bool {
 	default:
 		return false
 	}
+}
+
+func (n NodeContext[I, O]) setState(s NodeState) {
+	atomic.StoreInt32(n.state, int32(s))
 }
 
 type ctxKey[T any] struct{}

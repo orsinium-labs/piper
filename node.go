@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 )
 
 // A unit of work, a background process reading input, doing work, and writing to output.
@@ -18,11 +19,21 @@ func NewNode[I, O any](h func(*NodeContext[I, O]) error) *Node[I, O] {
 	}
 	return &Node[I, O]{
 		context: &NodeContext[I, O]{
-			in:  &wireIn[I]{},
-			out: &wireOut[O]{},
+			in:    &wireIn[I]{},
+			out:   &wireOut[O]{},
+			state: new(int32),
 		},
 		handler: h,
 	}
+}
+
+// Get the current state of the node.
+func (n *Node[I, O]) State() NodeState {
+	return NodeState(atomic.LoadInt32(n.context.state))
+}
+
+func (n *Node[I, O]) Name() string {
+	return n.context.name
 }
 
 // Set the node name.
@@ -76,6 +87,9 @@ func (n *Node[I, O]) Run(
 	}()
 	err := n.handler(n.context)
 	if err != nil {
+		n.context.setState(NodeStateFailed)
 		n.context.Errorf("exited with error: %w", err)
+	} else {
+		n.context.setState(NodeStateDone)
 	}
 }
