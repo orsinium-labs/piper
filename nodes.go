@@ -30,6 +30,9 @@ func CommandSource(cmd *exec.Cmd, chunkSize int) *Node[struct{}, []byte] {
 		}
 		err = cmd.Wait()
 		if err != nil {
+			if nc.Cancelled() && isKilled(err) {
+				return nil
+			}
 			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
 		}
 		return nil
@@ -61,6 +64,9 @@ func CommandSink(cmd *exec.Cmd) *Node[[]byte, struct{}] {
 		_ = stdin.Close()
 		err = cmd.Wait()
 		if err != nil {
+			if nc.Cancelled() && isKilled(err) {
+				return nil
+			}
 			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
 		}
 		return nil
@@ -105,6 +111,9 @@ func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) *Node[[]byte, []byte] {
 		}
 		err = cmd.Wait()
 		if err != nil {
+			if nc.Cancelled() && isKilled(err) {
+				return nil
+			}
 			return fmt.Errorf("wait for %s: %w", cmd.Path, err)
 		}
 		return nil
@@ -146,6 +155,14 @@ func pipeReader[T any](nc *NodeContext[T, []byte], r io.Reader, chunkSize int) e
 			return nil
 		}
 	}
+}
+
+func isKilled(err error) bool {
+	exitErr, isExitErr := err.(*exec.ExitError)
+	if !isExitErr || exitErr == nil {
+		return false
+	}
+	return exitErr.ExitCode() == -1
 }
 
 // Node writing byte chunks into the given write-closer and closing it.
