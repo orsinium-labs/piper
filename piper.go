@@ -22,10 +22,10 @@ type Errors <-chan error
 // The channel is closed when all nodes exit.
 func Run(ctx context.Context, nodes ...node) Errors {
 	errors := make(chan error)
-	wg := sync.WaitGroup{}
+	wg := &sync.WaitGroup{}
 	wg.Add(len(nodes))
 	for i, node := range nodes {
-		go node.Run(ctx, &wg, errors, i+1)
+		go node.Run(ctx, wg, errors, i+1)
 	}
 	go func() {
 		wg.Wait()
