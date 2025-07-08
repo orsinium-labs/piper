@@ -53,6 +53,14 @@ func (n NodeContext[I, O]) Context() context.Context {
 	return n.ctx
 }
 
+// Create a copy of NodeContext with the given Context.
+//
+// Can be used to set timeout/cancelation for Recv, Send, and Iter.
+func (n NodeContext[I, O]) WithContext(ctx context.Context) NodeContext[I, O] {
+	n.ctx = ctx
+	return n
+}
+
 // Read a message from the node input.
 //
 // Returns false if the pipeline is cancelled

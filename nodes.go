@@ -2,6 +2,7 @@ package piper
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
@@ -91,15 +92,30 @@ func CommandNode(cmd *exec.Cmd, stdoutChunkSize int) *Node[[]byte, []byte] {
 			_ = stdin.Close()
 		}()
 
-		go func() {
-			for chunk := range nc.Iter() {
-				_, err := stdin.Write(chunk)
-				if err != nil {
-					nc.Errorf("write to stdin: %w", err)
+		// Run a goroutine reading node input and writing it into the command's stdin.
+		{
+			ctx, cancel := context.WithCancel(nc.Context())
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				nci := nc.WithContext(ctx)
+				for chunk := range nci.Iter() {
+					_, err := stdin.Write(chunk)
+					if err != nil {
+						nc.Errorf("write to stdin: %w", err)
+					}
 				}
-			}
-			_ = stdin.Close()
-		}()
+				_ = stdin.Close()
+			}()
+			// On exiting the node, cancel the stdin write goroutine
+			// and wait for it to exit. Leaving the node before
+			// the goroutine stops will make the pipeline to finish
+			// and will cause `nc.Errorf` to write to a closed `errors` channel.
+			defer func() {
+				cancel()
+				<-done
+			}()
+		}
 
 		err = cmd.Start()
 		if err != nil {
